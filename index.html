@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>今日天气</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 20px;
+      padding: 32px 28px;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+    }
+
+    .city {
+      font-size: 20px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 4px;
+    }
+
+    .date {
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 20px;
+    }
+
+    .icon {
+      font-size: 64px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .temp {
+      font-size: 56px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 4px;
+    }
+
+    .temp span {
+      font-size: 24px;
+      font-weight: 400;
+      color: #666;
+    }
+
+    .desc {
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 24px;
+    }
+
+    .details {
+      display: flex;
+      justify-content: space-around;
+      border-top: 1px solid #eee;
+      padding-top: 20px;
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-label {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .detail-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    button {
+      margin-top: 24px;
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 12px;
+      background: #667eea;
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background: #5a6fd6;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card" id="weatherCard">
+    <div class="city">广州</div>
+    <div class="date" id="dateText"></div>
+    <div class="icon" id="weatherIcon">☀️</div>
+    <div class="temp" id="tempText">28<span>°C</span></div>
+    <div class="desc" id="descText">晴，微风</div>
+
+    <div class="details">
+      <div class="detail-item">
+        <span class="detail-label">湿度</span>
+        <span class="detail-value" id="humidity">62%</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">风速</span>
+        <span class="detail-value" id="wind">3 km/h</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">体感</span>
+        <span class="detail-value" id="feels">30°C</span>
+      </div>
+    </div>
+
+    <button onclick="randomWeather()">随机换个天气</button>
+  </div>
+
+  <script>
+    // 显示今天的日期
+    const dateText = document.getElementById('dateText');
+    const today = new Date();
+    const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+    dateText.textContent = today.toLocaleDateString('zh-CN', options);
+
+    // 随机天气数据
+    const weathers = [
+      { icon: '☀️', desc: '晴，微风', temp: 28, humidity: '62%', wind: '3 km/h', feels: '30°C' },
+      { icon: '⛅', desc: '多云转晴', temp: 24, humidity: '55%', wind: '5 km/h', feels: '25°C' },
+      { icon: '🌧️', desc: '小雨', temp: 19, humidity: '88%', wind: '8 km/h', feels: '18°C' },
+      { icon: '⛈️', desc: '雷阵雨', temp: 22, humidity: '92%', wind: '12 km/h', feels: '23°C' },
+      { icon: '❄️', desc: '小雪', temp: -2, humidity: '78%', wind: '10 km/h', feels: '-5°C' },
+      { icon: '🌫️', desc: '雾', temp: 15, humidity: '95%', wind: '1 km/h', feels: '15°C' }
+    ];
+
+    function randomWeather() {
+      const w = weathers[Math.floor(Math.random() * weathers.length)];
+
+      document.getElementById('weatherIcon').textContent = w.icon;
+      document.getElementById('descText').textContent = w.desc;
+      document.getElementById('tempText').innerHTML = w.temp + '<span>°C</span>';
+      document.getElementById('humidity').textContent = w.humidity;
+      document.getElementById('wind').textContent = w.wind;
+      document.getElementById('feels').textContent = w.feels;
+    }
+  </script>
+
+</body>
+</html>
