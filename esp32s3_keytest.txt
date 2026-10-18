@@ -1,0 +1,140 @@
+#include <Arduino.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
+
+#define PIN_SCL 13
+#define PIN_SDA 12
+#define PIN_RST 11
+#define PIN_DC 10
+#define PIN_CS 9
+#define PIN_BL 8
+
+#define N 5
+
+Adafruit_ST7789 tft(&SPI, PIN_CS, PIN_DC, PIN_RST);
+
+const uint8_t PINS[N] = {7, 6, 5, 4, 3};
+const char *NAMES[N] = {"OK   ", "UP   ", "RIGHT", "DOWN ", "LEFT "};
+
+bool lvl[N];
+unsigned long hiSince[N];
+unsigned long edges[N];
+unsigned long totalHi[N];
+bool floatMode = false;
+unsigned long lastDraw = 0;
+unsigned long lastPoll = 0;
+
+void applyMode() {
+  for (int i = 0; i < N; i++) {
+    pinMode(PINS[i], floatMode ? INPUT : INPUT_PULLDOWN);
+  }
+}
+
+void resetStats() {
+  unsigned long now = millis();
+  for (int i = 0; i < N; i++) {
+    lvl[i] = (digitalRead(PINS[i]) == HIGH);
+    hiSince[i] = lvl[i] ? now : 0;
+    edges[i] = 0;
+    totalHi[i] = 0;
+  }
+}
+
+void drawHeader() {
+  tft.fillRect(0, 0, 240, 26, ST77XX_BLACK);
+  tft.setTextSize(1);
+  tft.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+  tft.setCursor(2, 2);
+  tft.print("KEY DIAG   long-press OK = mode");
+  tft.setCursor(2, 13);
+  tft.setTextColor(floatMode ? ST77XX_MAGENTA : ST77XX_WHITE, ST77XX_BLACK);
+  tft.print(floatMode ? "MODE: FLOATING (no pull-down)"
+                      : "MODE: INPUT_PULLDOWN (normal)");
+}
+
+void drawRows() {
+  unsigned long now = millis();
+  for (int i = 0; i < N; i++) {
+    bool v = lvl[i];
+    unsigned long hi = v ? (now - hiSince[i]) : 0;
+    uint16_t c = ST77XX_GREEN;
+    if (v && hi > 2000) {
+      c = ST77XX_RED;
+    } else if (v) {
+      c = ST77XX_YELLOW;
+    }
+    int y = 30 + i * 14;
+    tft.fillRect(0, y, 240, 14, ST77XX_BLACK);
+    tft.setTextSize(1);
+    tft.setTextColor(c, ST77XX_BLACK);
+    tft.setCursor(2, y + 3);
+    char buf[48];
+    sprintf(buf, "%s G%d %s  e=%-6lu hi=%lums", NAMES[i], PINS[i],
+            v ? "HIGH" : "LOW ", edges[i], hi);
+    tft.print(buf);
+  }
+}
+
+void drawFooter() {
+  tft.fillRect(0, 108, 240, 40, ST77XX_BLACK);
+  tft.setTextSize(1);
+  tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+  tft.setCursor(2, 110);
+  tft.print("RED  = held >2s  (stuck or noisy)");
+  tft.setCursor(2, 121);
+  tft.print("e    = level changes since reset");
+  tft.setCursor(2, 132);
+  tft.print("Watch: does LEFT count up alone?");
+}
+
+void setup() {
+  pinMode(PIN_BL, OUTPUT);
+  digitalWrite(PIN_BL, HIGH);
+  SPI.begin(PIN_SCL, -1, PIN_SDA, -1);
+  tft.init(240, 240);
+  tft.setRotation(2);
+  tft.fillScreen(ST77XX_BLACK);
+  applyMode();
+  resetStats();
+  drawHeader();
+  drawRows();
+  drawFooter();
+}
+
+void loop() {
+  unsigned long now = millis();
+
+  if (now - lastPoll >= 3) {
+    lastPoll = now;
+    for (int i = 0; i < N; i++) {
+      bool v = (digitalRead(PINS[i]) == HIGH);
+      if (v != lvl[i]) {
+        lvl[i] = v;
+        edges[i]++;
+        if (v) {
+          hiSince[i] = now;
+        } else {
+          totalHi[i] += now - hiSince[i];
+        }
+      }
+    }
+  }
+
+  if (lvl[0] && (now - hiSince[0]) > 1200) {
+    floatMode = !floatMode;
+    applyMode();
+    while (digitalRead(7) == HIGH) {
+      delay(10);
+    }
+    resetStats();
+    drawHeader();
+    drawFooter();
+  }
+
+  if (now - lastDraw >= 150) {
+    lastDraw = now;
+    drawRows();
+  }
+  delay(5);
+}
