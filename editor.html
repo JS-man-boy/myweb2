@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>关卡编辑器</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#16181d;color:#d8dce4;font:14px/1.5 "Microsoft YaHei",system-ui,sans-serif}
+#wrap{display:flex;gap:14px;padding:14px;flex-wrap:wrap}
+#cv{background:#0d0f13;border:1px solid #333;cursor:crosshair;image-rendering:pixelated}
+#left{flex:0 0 auto}
+#right{flex:1 1 340px;min-width:300px}
+h1{font-size:17px;margin:0 0 10px;color:#ffd24a}
+h2{font-size:13px;margin:16px 0 6px;color:#8fb8ff;font-weight:600}
+.pal{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;margin-top:10px}
+.pal button,.row button{background:#242833;color:#cdd3de;border:1px solid #39404f;border-radius:5px;padding:6px 8px;cursor:pointer;font:inherit;text-align:left}
+.pal button.on{border-color:#ffd24a;background:#3a3320;color:#ffd24a}
+.pal button:hover,.row button:hover{background:#2f3542}
+.pal b{display:inline-block;width:16px;text-align:center;margin-right:5px;font-family:monospace}
+.row{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.levels{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-bottom:10px}
+.levels button{padding:5px 0;font-size:12px;text-align:center;background:#242833;color:#cdd3de;border:1px solid #39404f;border-radius:4px;cursor:pointer}
+.levels button.on{background:#ffd24a;color:#16181d;border-color:#ffd24a}
+.levels button.bad{border-color:#e5534b;color:#e5534b}
+.levels button.bad.on{background:#e5534b;color:#fff}
+#log{background:#0d0f13;border:1px solid #333;border-radius:5px;padding:8px;font:12px/1.6 monospace;min-height:70px;max-height:180px;overflow:auto;white-space:pre-wrap}
+.ok{color:#4ac26b}.err{color:#e5534b}
+.legend{font-size:12px;color:#8a919e;line-height:1.8}
+.legend code{color:#ffd24a;font-weight:700}
+#toast{position:fixed;left:50%;top:22px;transform:translateX(-50%);background:#ffd24a;color:#16181d;padding:8px 18px;border-radius:6px;font-weight:700;opacity:0;transition:.25s;pointer-events:none}
+#toast.on{opacity:1}
+#sp{display:none;width:42px;height:42px;border:4px solid #39404f;border-top-color:#4da3ff;border-radius:50%;margin:12px auto;animation:sp 0.9s linear infinite}
+#sp.on{display:block}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="left">
+    <canvas id="cv" width="400" height="340"></canvas>
+    <div class="pal" id="pal"></div>
+  </div>
+  <div id="right">
+    <h1>关卡编辑器 <span style="font-size:12px;color:#4ac26b">v3</span></h1>
+    <div class="row">
+      <button id="btCheck">校验全部</button>
+      <button id="btClear">清空本关</button>
+      <button id="btEmpty">清空全部</button>
+    </div>
+    <h2>关卡（20 关）</h2>
+    <div class="row" style="align-items:center">
+      <button id="btPrev" style="width:86px">◀ 上一关</button>
+      <span id="curLv" style="color:#ffd24a;font-weight:700;min-width:96px;text-align:center;align-self:center">第 1 / 20 关</span>
+      <button id="btNext" style="width:86px">下一关 ▶</button>
+    </div>
+    <div class="levels" id="levels"></div>
+    <div class="row">
+      <input id="pkName" value="pack14.txt" style="width:110px;background:#242833;color:#d8dce4;border:1px solid #39404f;border-radius:5px;padding:6px">
+      <button id="btSubmit" style="background:#4da3ff;color:#0b0f14;border-color:#4da3ff;font-weight:700">提交</button>
+      <button id="btCancel" style="background:#e5534b;color:#fff;border-color:#e5534b;font-weight:700">取消</button>
+      <span id="st" style="color:#4ac26b;font-size:12px;align-self:center"></span>
+    </div>
+    <div id="sp"></div>
+    <div class="row">
+      <button id="btExport">导出 packN.txt</button>
+      <button id="btCopy">复制文本</button>
+      <label class="row" style="display:inline-flex">
+        <button id="btImportBtn">导入文件</button>
+        <input type="file" id="btImport" accept=".txt" hidden>
+      </label>
+    </div>
+    <h2>校验结果</h2>
+    <div id="log">点「校验全部」检查规则</div>
+    <h2>图例</h2>
+    <div class="legend">
+      <code>.</code> 空　<code>#</code> 地面　<code>P</code> 出生点（必须在第16行最左）　<code>D</code> 门<br>
+      <code>^</code> 尖刺（碰到死）　<code>x</code> 隐形尖刺　<code>V</code> 顶刺（会掉落）<br>
+      <code>o</code> 落石　<code>~</code> 假地板（踩上0.5秒后消失）　<code>!</code> 秒塌<br>
+      <code>B</code> 闪烁块（0.7秒开关一次）　<code>S</code> 弹簧　<code>R</code> 反转操作　<code>W</code> 假墙（能穿过）<br>
+      <b>规则</b>：尖刺最多3连　顶刺最多1个　地面危险(<code>^</code>和<code>x</code>)合计最多3格　坑最多5格　<code>~</code><code>!</code><code>B</code>下方必须挖空
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+const COLS=20, ROWS=17, CELL=20;
+const TILES=[
+ {c:'.',n:'空',col:'#0d0f13'},
+ {c:'#',n:'地面',col:'#6b7280'},
+ {c:'^',n:'尖刺',col:'#e5534b'},
+ {c:'x',n:'隐形刺',col:'#8b2f6b'},
+ {c:'V',n:'顶刺',col:'#d94fa0'},
+ {c:'o',n:'落石',col:'#4b5563'},
+ {c:'~',n:'假地板',col:'#a16207'},
+ {c:'!',n:'秒塌',col:'#c2410c'},
+ {c:'B',n:'闪烁块',col:'#2563eb'},
+ {c:'S',n:'弹簧',col:'#eab308'},
+ {c:'R',n:'反转',col:'#06b6d4'},
+ {c:'P',n:'出生点',col:'#22c55e'},
+ {c:'D',n:'门',col:'#fbbf24'},
+ {c:'W',n:'假墙',col:'#9ca3af'}
+];
+const COLOR={}; TILES.forEach(t=>COLOR[t.c]=t.col);
+function blankLevel(){
+  const L=[];
+  for(let r=0;r<ROWS;r++) L.push(new Array(COLS).fill('.'));
+  L[16]=new Array(COLS).fill('#');
+  L[15][1]='P';
+  L[15][18]='D';
+  return L;
+}
+let levels=[]; for(let i=0;i<20;i++) levels.push(blankLevel());
+let cur=0, curTile='#';
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const palEl=document.getElementById('pal'), lvEl=document.getElementById('levels');
+const logEl=document.getElementById('log');
+
+function draw(){
+  ctx.fillStyle='#0d0f13'; ctx.fillRect(0,0,cv.width,cv.height);
+  const L=levels[cur];
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const t=L[r][c];
+    ctx.fillStyle=COLOR[t]||'#333';
+    ctx.fillRect(c*CELL+1,r*CELL+1,CELL-2,CELL-2);
+    if(t!=='.'){
+      ctx.fillStyle='#000'; ctx.font='bold 12px monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(t,c*CELL+CELL/2,r*CELL+CELL/2+1);
+    }
+  }
+  ctx.strokeStyle='#2a3040'; ctx.lineWidth=1;
+  for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(c*CELL,0);ctx.lineTo(c*CELL,ROWS*CELL);ctx.stroke();}
+  for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*CELL);ctx.lineTo(COLS*CELL,r*CELL);ctx.stroke();}
+  ctx.strokeStyle='#ffd24a'; ctx.lineWidth=2;
+  ctx.strokeRect(0,0,COLS*CELL,ROWS*CELL);
+}
+function drawPal(){
+  palEl.innerHTML='';
+  TILES.forEach(t=>{
+    const b=document.createElement('button');
+    b.innerHTML='<b style="color:'+t.col+'">'+t.c+'</b>'+t.n;
+    if(t.c===curTile) b.className='on';
+    b.onclick=()=>{curTile=t.c;drawPal();};
+    palEl.appendChild(b);
+  });
+}
+function drawLevels(){
+  const bad=levels.map((L,i)=>{ try{ return checkOne(L,i).length>0; }catch(e){ return false; } });
+  lvEl.innerHTML='';
+  for(let i=0;i<20;i++){
+    const b=document.createElement('button');
+    b.textContent=i+1;
+    if(i===cur) b.classList.add('on');
+    if(bad[i]) b.classList.add('bad');
+    b.dataset.i=i;
+    lvEl.appendChild(b);
+  }
+}
+function setLevel(i){
+  if(i<0) i=0;
+  if(i>19) i=19;
+  cur=i;
+  const c=document.getElementById('curLv');
+  if(c) c.textContent='第 '+(i+1)+' / 20 关';
+  draw();
+  drawLevels();
+}
+document.getElementById('btPrev').onclick=function(){ setLevel(cur-1); };
+document.getElementById('btNext').onclick=function(){ setLevel(cur+1); };
+document.addEventListener('click',function(e){
+  var b=e.target;
+  while(b&&b.tagName!=='BUTTON'){
+    if(b===document.body) return;
+    b=b.parentNode;
+  }
+  if(!b||!b.dataset.i) return;
+  var i=parseInt(b.dataset.i,10);
+  if(isNaN(i)) return;
+  setLevel(i);
+});
+let painting=false, eraseMode=false;
+function paintAt(e){
+  const rect=cv.getBoundingClientRect();
+  const x=Math.floor((e.clientX-rect.left)/(rect.width/COLS));
+  const y=Math.floor((e.clientY-rect.top)/(rect.height/ROWS));
+  if(x<0||x>=COLS||y<0||y>=ROWS) return;
+  levels[cur][y][x]=eraseMode?'.':curTile;
+  draw();
+}
+cv.addEventListener('mousedown',e=>{painting=true;eraseMode=(e.button===2);paintAt(e);});
+cv.addEventListener('mousemove',e=>{if(painting)paintAt(e);});
+window.addEventListener('mouseup',()=>{painting=false;drawLevels();});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];painting=true;eraseMode=false;paintAt(t);},{passive:false});
+cv.addEventListener('touchmove',e=>{e.preventDefault();if(painting)paintAt(e.touches[0]);},{passive:false});
+cv.addEventListener('touchend',()=>{painting=false;drawLevels();});
+
+function runs(L,row,set){
+  const out=[]; let c=0;
+  while(c<COLS){
+    if(set.indexOf(L[row][c])<0){c++;continue;}
+    const st=c; while(c<COLS&&set.indexOf(L[row][c])>=0)c++;
+    out.push([st,c-st]);
+  }
+  return out;
+}
+function checkOne(L,idx){
+  const err=[];
+  if(L.length!==ROWS) err.push('行数不对');
+  for(let r=0;r<ROWS;r++) if(L[r].length!==COLS) err.push('第'+(r+1)+'行宽度不对');
+  let hasP=false, hasD=false;
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    if(L[r][c]==='P') hasP=true;
+    if(L[r][c]==='D') hasD=true;
+  }
+  if(!hasP) err.push('没有出生点 P');
+  if(!hasD) err.push('没有门 D');
+  runs(L,15,'^').forEach(([s,w])=>{ if(w>3) err.push('第'+(s+1)+'列尖刺'+w+'连（最多3）'); });
+  runs(L,15,'^x').forEach(([s,w])=>{ if(w>3) err.push('第'+(s+1)+'列地面危险'+w+'格（^和x合计最多3）'); });
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(L[r][c]!=='V') continue;
+      if(c<COLS-1&&L[r][c+1]==='V') err.push('第'+(r+1)+'行顶刺左右相连');
+      if(r<ROWS-1&&L[r+1][c]==='V') err.push('第'+(r+1)+'行顶刺上下相连');
+    }
+  }
+  runs(L,16,'.').forEach(([s,w])=>{
+    if(w>5) err.push('第'+(s+1)+'列坑'+w+'格（最多5）');
+    if(s===0||s+w>=COLS) err.push('坑不能贴边');
+    if(w>3){
+      let cov=true;
+      for(let q=s;q<s+w;q++) if('~!B'.indexOf(L[15][q])<0) cov=false;
+      if(!cov) err.push('第'+(s+1)+'列坑'+w+'格太宽，上面要有假地板/秒塌/闪烁块');
+    }
+  });
+  for(let c=0;c<COLS;c++){
+    if('~!B'.indexOf(L[15][c])>=0 && L[16][c]!=='#') err.push('第'+(c+1)+'列'+L[15][c]+'下方不是地面（先挖空）');
+  }
+  for(let c=1;c<COLS-1;c++){
+    if(L[15][c]!=='^') continue;
+    if(L[16][c-1]==='.'||L[16][c+1]==='.') err.push('第'+(c+1)+'列尖刺紧贴坑，没有起跳点');
+  }
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(L[r][c]!=='o'&&L[r][c]!=='V') continue;
+      let land=false;
+      for(let rr=r+1;rr<ROWS;rr++) if('#~!B'.indexOf(L[rr][c])>=0){land=true;break;}
+      if(!land) err.push('第'+(r+1)+'行第'+(c+1)+'列'+L[r][c]+'正下方没有落脚点');
+    }
+  }
+  let hasSpring=false;
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){ if(L[r][c]==='S') hasSpring=true; }
+  if(!hasSpring){
+    let hi=-1;
+    for(let r=0;r<=9;r++) for(let c=0;c<COLS;c++){ if(L[r][c]==='#'){ if(hi<0||r<hi) hi=r; } }
+    if(hi>=0) err.push('第'+(hi+1)+'行有平台，太高跳不上去（跳跃最高约4.3格，需要弹簧S）');
+  }
+  return err;
+}
+function checkAll(){
+  let out='', bad=0;
+  for(let i=0;i<20;i++){
+    let e=[];
+    try{ e=checkOne(levels[i],i); }catch(x){ e=['校验出错: '+x.message]; }
+    if(e.length){ bad++; out+='<span class="err">第'+(i+1)+'关：'+e.join('；')+'</span>\n'; }
+  }
+  if(bad===0) out='<span class="ok">全部 20 关通过校验，可以导出</span>';
+  else out='<span class="err">'+bad+' 关有问题：</span>\n'+out;
+  logEl.innerHTML=out;
+  drawLevels();
+}
+function toText(){
+  let s='LDV1\n20\n';
+  for(let i=0;i<20;i++){
+    for(let r=0;r<ROWS;r++) s+=levels[i][r].join('')+'\n';
+  }
+  return s;
+}
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('on');
+  setTimeout(()=>t.classList.remove('on'),1400);
+}
+document.getElementById('btCheck').onclick=checkAll;
+document.getElementById('btClear').onclick=()=>{levels[cur]=blankLevel();draw();drawLevels();};
+document.getElementById('btEmpty').onclick=()=>{if(!confirm('清空全部 20 关？'))return;levels=[];for(let i=0;i<20;i++)levels.push(blankLevel());draw();drawLevels();};
+document.getElementById('btExport').onclick=()=>{
+  const e=[]; for(let i=0;i<20;i++) e.push(checkOne(levels[i],i).length);
+  const bad=e.filter(x=>x>0).length;
+  if(bad>0&&!confirm(bad+' 关有问题，仍然导出？')) return;
+  const blob=new Blob([toText()],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='pack.txt';
+  a.click();
+  toast('已导出 pack.txt（改名为 packN.txt）');
+};
+document.getElementById('btCopy').onclick=()=>{
+  navigator.clipboard.writeText(toText()).then(()=>toast('已复制'),()=>toast('复制失败'));
+};
+document.getElementById('btImportBtn').onclick=()=>document.getElementById('btImport').click();
+document.getElementById('btImport').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const lines=rd.result.replace(/\r/g,'').split('\n').filter(x=>x.length>0);
+    if(lines[0]!=='LDV1'){alert('不是 LDV1 格式');return;}
+    const n=parseInt(lines[1],10)||0;
+    const loaded=[];
+    for(let i=0;i<n&&i<20;i++){
+      const L=[];
+      for(let r=0;r<ROWS;r++) L.push((lines[2+i*ROWS+r]||'').padEnd(COLS,'.').slice(0,COLS).split(''));
+      loaded.push(L);
+    }
+    while(loaded.length<20) loaded.push(blankLevel());
+    levels=loaded;
+    cur=0; draw(); drawLevels(); toast('已导入 '+n+' 关');
+  };
+  rd.readAsText(f);
+};
+document.addEventListener('keydown',e=>{
+  const map={'1':'#','2':'^','3':'x','4':'V','5':'o','6':'~','7':'!','8':'B','9':'S','0':'R','p':'P','d':'D','w':'W','Escape':'.'};
+  const k=e.key.toLowerCase();
+  if(map[k]!==undefined){curTile=map[k];drawPal();}
+  if(k==='arrowleft'&&cur>0){cur--;draw();drawLevels();}
+  if(k==='arrowright'&&cur<19){cur++;draw();drawLevels();}
+});
+const C3URL='https://espuse.dmzgate.com';
+const C3PW='gamebox2026';
+let subCancel=false;
+document.getElementById('btCancel').onclick=function(){
+  subCancel=true;
+  const st=document.getElementById('st');
+  if(st) st.textContent='已取消';
+};
+document.getElementById('btSubmit').onclick=async()=>{
+  subCancel=false;
+  const bt=document.getElementById('btSubmit'),st=document.getElementById('st'),sp=document.getElementById('sp');
+  let bad=0;
+  for(let i=0;i<20;i++){ if(checkOne(levels[i],i).length>0) bad++; }
+  if(bad>0){ const go=confirm(bad+' 关没过校验（红线标出了）。仍然提交？'); if(!go) return; }
+  const name=(document.getElementById('pkName').value||'').trim();
+  if(!/^pack[0-9]{1,2}\.txt$/.test(name)){ alert('文件名要像 pack14.txt'); return; }
+  const txt=toText();
+  if(txt.length<100){ st.textContent='内容太短'; return; }
+  if(txt.length>200000){ st.textContent='内容太大，超过 200KB'; return; }
+  const bs=new TextEncoder().encode(txt);
+  const CH=900, total=Math.ceil(bs.length/CH);
+  bt.disabled=true; sp.classList.add('on');
+  for(let i=0;i<total;i++){
+    if(subCancel){ st.textContent='已取消（已发送 '+(i)+'/'+total+' 片）'; bt.disabled=false; sp.classList.remove('on'); return; }
+    let hx='';
+    const e=Math.min(i*CH+CH,bs.length);
+    for(let k=i*CH;k<e;k++) hx+=(bs[k]<16?'0':'')+bs[k].toString(16);
+    let ok=false;
+    for(let t=0;t<3&&!ok;t++){
+      try{ const r=await fetch(C3URL+'/api/put?pw='+encodeURIComponent(C3PW)+'&f='+encodeURIComponent(name)+'&i='+i+'&d='+hx); ok=r.ok; }catch(_){ ok=false; }
+    }
+    if(!ok){ st.textContent='第'+(i+1)+'片失败，请重试'; bt.disabled=false; sp.classList.remove('on'); return; }
+    st.textContent='上传中 '+(i+1)+'/'+total;
+  }
+  st.textContent='正在转发到 GitHub ...';
+  try{
+    const r2=await fetch(C3URL+'/api/push?pw='+encodeURIComponent(C3PW)+'&f='+encodeURIComponent(name));
+    st.textContent='结果: '+await r2.text();
+  }catch(_){ st.textContent='转发失败，检查 C3 是否在线'; }
+  bt.disabled=false; sp.classList.remove('on');
+};
+drawPal(); setLevel(0);
+</script>
+</body>
+</html>
